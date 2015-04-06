@@ -1,0 +1,4 @@
+ check process mprobe.py with pidfile /var/run/mprobe.pid
+   start program = "/etc/init.d/mprobe start"
+   stop  program = "/etc/init.d/mprobe stop"
+   if 5 restarts with 5 cycles then timeout
