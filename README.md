@@ -4,7 +4,7 @@ raspberry pi multi sensor environment probe
 Utilizes the Seeed GrovePi+ project board as well as a variety of sensors.
 
 Currently using:
--HCHO Gas Sensor
--MQ9 Gas Sensor
--Water Sensor
--RGB LCD Display
+ 1. HCHO Gas Sensor
+ 2. MQ9 Gas Sensor
+ 3. Water Sensor
+ 4. RGB LCD Display
