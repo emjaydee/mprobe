@@ -17,13 +17,14 @@ import argparse
 import time
 import rrdtool
 import grovepi
+import atexit
 from grove_rgb_lcd import *
 
 parser = argparse.ArgumentParser(description='environment monitor')
 parser.add_argument('--quiet', action='store_true', help='disable displaying results on console')
 parser.add_argument('--nolcd', action='store_true', help='disable displaying results on lcd')
+parser.add_argument('--noalarm', action='store_true', help='disables audible alarm sounds')
 args = parser.parse_args()
-
 
 
 pidfile = "/var/run/mprobe.pid"
@@ -39,6 +40,17 @@ if os.path.exists(pidfile):
         os.remove(pidfile)
 open(pidfile, 'w').write(str(os.getpid()))
 
+if not os.path.isfile("dust_sensor.rrd"):
+	ret_aq = rrdtool.create("dust_sensor.rrd", "--no-overwrite", "--step", "30", "--start", '0',
+	 "DS:sensor_value:GAUGE:300:U:U",
+	 "RRA:AVERAGE:0.5:1:600",
+	 "RRA:AVERAGE:0.5:6:700",
+	 "RRA:AVERAGE:0.5:24:775",
+	 "RRA:AVERAGE:0.5:288:797",
+	 "RRA:MAX:0.5:1:600",
+	 "RRA:MAX:0.5:6:700",
+	 "RRA:MAX:0.5:24:775",
+	 "RRA:MAX:0.5:444:797")
 if not os.path.isfile("aq_sensor.rrd"):
 	ret_aq = rrdtool.create("aq_sensor.rrd", "--no-overwrite", "--step", "30", "--start", '0',
 	 "DS:sensor_value:GAUGE:300:U:U",
@@ -115,12 +127,14 @@ mq5_gas_sensor = 1
 # Connect the Grove Water Sensor to digital port D2
 water_sensor = 0
 buzzer = 2
+atexit.register(grovepi.dust_sensor_dis)
 
 grovepi.pinMode(hcho_sensor,"INPUT")
 grovepi.pinMode(mq9_gas_sensor,"INPUT")
 #grovepi.pinMode(aq_sensor,"INPUT")
 grovepi.pinMode(mq5_gas_sensor,"INPUT")
 grovepi.pinMode(buzzer,"OUTPUT")
+grovepi.dust_sensor_en()
 
 if not args.nolcd:
     setRGB(0,0,0)
@@ -145,6 +159,9 @@ while True:
 	## uncomment below to enable water monitoring ##
 	#water_value = grovepi.digitalRead(water_sensor)
 	water_value = 1
+        [new_val,lowpulseoccupancy] = grovepi.dustSensorRead()
+        if new_val:
+        	dust_sensor_value=lowpulseoccupancy
 	
 
         # Calculate voltage
@@ -162,16 +179,18 @@ while True:
             print "CO/LPG/CH4: density =", mq9_density
 #            print "AIR:", aq_sensor_value
             print "MQ5: density =", mq5_density
+            print "DUST: pcsc =", dust_sensor_value
             # print "CO/LPG/CH4: sensor_value =", mq9_sensor_value, " density =", mq9_density
 	if not args.nolcd:
 	    setRGB(0,255,0)
-	    setText("CO:%d VOC:%d MQ5:%d" % (mq9_density, hcho_sensor_value, mq5_density))
+	    setText("CO:%d VOC:%d MQ5:%d D:%d" % (mq9_density, hcho_sensor_value, mq5_density, dust_sensor_value))
 
 	from rrdtool import update as rrd_update
 #	ret_aq = rrd_update('aq_sensor.rrd', 'N:%s' %(aq_sensor_value));	
 	ret_hcho = rrd_update('hcho_sensor.rrd', 'N:%s' %(hcho_sensor_value));	
 	ret_mq9 = rrd_update('mq9_sensor.rrd', 'N:%s' %(mq9_sensor_value));	
 	ret_mq5 = rrd_update('mq5_sensor.rrd', 'N:%s' %(mq5_sensor_value));	
+	ret_dust = rrd_update('dust_sensor.rrd', 'N:%s' %(dust_sensor_value));	
 	ret_water1 = rrd_update('water_sensor.rrd', 'N:%s' %(water_value));	
 
 	if water_value == 0:
@@ -209,7 +228,7 @@ while True:
     		    for c in range(0,255):
         		setRGB(255,255-c,255-c)
         		time.sleep(.01)
-	if alarm == 1:
+	if alarm == 1 and not args.noalarm:
 		alarmrepeat = 0
 		while alarmrepeat <= 5:
 			grovepi.digitalWrite(buzzer,1)
@@ -219,6 +238,9 @@ while True:
 			alarmrepeat = alarmrepeat + 1
 		grovepi.digitalWrite(buzzer,0)
         time.sleep(30)
+	setRGB(0,255,0)
+	setText("CO:%d VOC:%d MQ5:%d D:%d" % (mq9_density, hcho_sensor_value, mq5_density, dust_sensor_value))
+        time.sleep(5)
 
     except KeyboardInterrupt:
         setText("")
